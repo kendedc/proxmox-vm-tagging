@@ -1,0 +1,33 @@
+---
+- name: Query the cluster resource index
+  ansible.builtin.uri:
+    url: "{{ pxt_api_url }}/api2/json/cluster/resources?type=vm"
+    method: GET
+    headers:
+      Authorization: "PVEAPIToken={{ pxt_api_token_id }}={{ pxt_api_token_secret }}"
+    validate_certs: "{{ pxt_validate_certs }}"
+    return_content: true
+    status_code: [200]
+    timeout: 30
+  register: pxt_resources
+  no_log: true
+  check_mode: false
+
+- name: Keep only the managed guest types
+  ansible.builtin.set_fact:
+    pxt_current: >-
+      {{ pxt_resources.json.data
+         | selectattr('type', 'in', pxt_guest_types)
+         | selectattr('vmid', 'defined')
+         | list }}
+
+- name: Fail when the cluster returned no guests
+  ansible.builtin.fail:
+    msg: >-
+      Proxmox returned no guests of type {{ pxt_guest_types | join(', ') }};
+      check the API token permissions (VM.Audit on /vms is the minimum)
+  when: pxt_current | length == 0
+
+- name: Report the cluster size
+  ansible.builtin.debug:
+    msg: "found {{ pxt_current | length }} guests across the cluster"

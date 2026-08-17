@@ -1,0 +1,6 @@
+VMID,Name,Environment,Owner,Application,Backup,Tags
+100,web-prod-01,Production,platform,nginx,daily,public;tier-web
+101,web-prod-02,Production,platform,nginx,daily,public;tier-web
+200,db-prod-01,Production,dba,postgres,hourly,tier-data;pci
+300,app-uat-01,UAT,app-team,billing,weekly,tier-app
+400,jenkins-01,Development,devops,jenkins,none,

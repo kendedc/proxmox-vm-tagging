@@ -1,0 +1,27 @@
+---
+# Site configuration — override per environment or via an AWX survey
+# Secrets belong in an AWX credential, never here
+pxt_api_url: "https://pve01.example.com:8006"
+pxt_validate_certs: true
+
+pxt_source_path: "{{ playbook_dir }}/files/vm_tags.csv"
+
+pxt_vmid_column: "VMID"
+pxt_name_column: "Name"
+pxt_tags_column: "Tags"
+
+pxt_tag_columns:
+  Environment: "env"
+  Owner: "owner"
+  Application: "app"
+  Backup: "backup"
+
+pxt_mode: "replace"
+
+# Tags applied by other tooling that this playbook must not remove
+pxt_protected_prefixes:
+  - "pve-"
+  - "monitoring-"
+
+pxt_max_changes: 100
+pxt_max_changed_pct: 40

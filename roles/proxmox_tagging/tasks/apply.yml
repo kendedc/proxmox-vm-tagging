@@ -1,0 +1,46 @@
+---
+# Tags are written straight to the guest config endpoint; only drifted guests
+# appear in pxt_plan.changes, so every request here is a real change
+- name: Write tags to Proxmox
+  ansible.builtin.uri:
+    url: >-
+      {{ pxt_api_url }}/api2/json/nodes/{{ item.node }}/{{ item.type }}/{{ item.vmid }}/config
+    method: PUT
+    headers:
+      Authorization: "PVEAPIToken={{ pxt_api_token_id }}={{ pxt_api_token_secret }}"
+    body_format: form-urlencoded
+    body:
+      tags: "{{ item.desired_tags | join(';') }}"
+    validate_certs: "{{ pxt_validate_certs }}"
+    status_code: [200]
+    timeout: 30
+  loop: "{{ pxt_plan.changes }}"
+  loop_control:
+    label: "{{ item.vmid }} ({{ item.name }})"
+  throttle: "{{ pxt_throttle | int }}"
+  register: pxt_writes
+  changed_when: true
+  failed_when: false
+  no_log: true
+
+- name: Collect the failed writes
+  ansible.builtin.set_fact:
+    pxt_failed_writes: >-
+      {{ pxt_writes.results
+         | rejectattr('status', 'equalto', 200)
+         | map(attribute='item')
+         | list }}
+
+- name: Report the failed writes
+  ansible.builtin.debug:
+    msg: "failed to tag {{ item.vmid }} ({{ item.name }}) on {{ item.node }}"
+  loop: "{{ pxt_failed_writes }}"
+  loop_control:
+    label: "{{ item.vmid }}"
+
+- name: Fail when any write did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      {{ pxt_failed_writes | length }} of {{ pxt_plan.changes | length }} tag
+      writes failed; check VM.Config.Options permission on the API token
+  when: pxt_failed_writes | length > 0

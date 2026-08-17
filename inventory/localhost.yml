@@ -1,0 +1,7 @@
+---
+# The whole workflow is API-driven, so one implicit local host is enough
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"

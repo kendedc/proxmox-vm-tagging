@@ -1,0 +1,13 @@
+reports/
+*.retry
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# AWX installs galaxy content here on project sync; requirements.yml is tracked
+collections/ansible_collections/
+
+# Excel lock files
+~$*.xlsx

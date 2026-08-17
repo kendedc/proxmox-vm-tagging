@@ -1,0 +1,43 @@
+# Proxmox tagging run — {{ ansible_facts.date_time.iso8601 }}
+
+- Source: `{{ pxt_workbook }}` sheet `{{ pxt_source_sheet }}` ({{ pxt_plan.stats.rows }} rows)
+- Cluster: `{{ pxt_api_url }}` ({{ pxt_plan.stats.guests }} guests)
+- Mode: `{{ pxt_mode }}`
+- Applied: {{ 'yes' if (pxt_apply | bool) and not ansible_check_mode else 'no (dry run)' }}
+
+| Metric | Count |
+|---|---|
+| Changed | {{ pxt_plan.stats.changed }} |
+| Already correct | {{ pxt_plan.stats.unchanged }} |
+| In sheet, not in Proxmox | {{ pxt_plan.stats.missing_in_proxmox }} |
+| In Proxmox, not in sheet | {{ pxt_plan.stats.unmanaged }} |
+
+{% if pxt_plan.changes %}
+## Changes
+
+| VMID | Name | Node | Added | Removed | Resulting tags |
+|---|---|---|---|---|---|
+{% for change in pxt_plan.changes %}
+| {{ change.vmid }} | {{ change.name }} | {{ change.node }} | {{ change.added | join(', ') or '—' }} | {{ change.removed | join(', ') or '—' }} | {{ change.desired_tags | join(', ') or '—' }} |
+{% endfor %}
+{% endif %}
+
+{% if pxt_plan.missing_in_proxmox %}
+## Rows with no matching guest
+
+| Sheet row | Identifier |
+|---|---|
+{% for row in pxt_plan.missing_in_proxmox %}
+| {{ row.row }} | {{ row.identifier }} |
+{% endfor %}
+{% endif %}
+
+{% if pxt_plan.unmanaged %}
+## Guests absent from the spreadsheet
+
+| VMID | Name | Current tags |
+|---|---|---|
+{% for guest in pxt_plan.unmanaged %}
+| {{ guest.vmid }} | {{ guest.name }} | {{ guest.tags | join(', ') or '—' }} |
+{% endfor %}
+{% endif %}

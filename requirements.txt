@@ -1,0 +1,6 @@
+# Python dependencies for a custom AWX execution environment
+#
+# NONE of these are needed on the CSV path — the stock awx-ee image runs this
+# project as-is. Build a custom EE only if you keep the source as .xlsx
+openpyxl>=3.1.0      # xlsx parsing; not required for csv/tsv
+proxmoxer>=2.0.1     # only for the community.general.proxmox_* modules

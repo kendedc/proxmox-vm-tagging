@@ -1,0 +1,14 @@
+---
+# AWX installs this automatically on project sync because of its path
+# (collections/requirements.yml). Everything the role needs by default is in
+# ansible.builtin, which ships with ansible-core — these are all optional
+collections:
+  # proxmox_* modules and the dynamic inventory plugin (alternative write path)
+  - name: community.general
+    version: ">=8.0.0"
+    source: https://galaxy.ansible.com
+
+  # only needed if you manage AWX objects as code
+  - name: awx.awx
+    version: ">=24.0.0"
+    source: https://galaxy.ansible.com

@@ -1,0 +1,61 @@
+---
+# Proxmox API endpoint, e.g. https://pve01.example.com:8006
+pxt_api_url: "https://proxmox.example.com:8006"
+pxt_validate_certs: true
+
+# API token credentials — inject these from AWX, never commit them
+# Format: pxt_api_token_id = "ansible@pve!tagging"
+pxt_api_token_id: ""
+pxt_api_token_secret: ""
+
+# Source table: a path inside the project, or a URL to download first
+# csv needs no extra dependency; xlsx additionally needs openpyxl in the EE
+pxt_source_path: "{{ playbook_dir }}/files/vm_tags.csv"
+pxt_source_url: ""
+pxt_source_format: "auto"
+pxt_source_header_row: 1
+
+# utf-8-sig transparently strips the BOM that Excel's "CSV UTF-8" export adds
+pxt_source_encoding: "utf-8-sig"
+
+# xlsx only — ignored for csv
+pxt_source_sheet: "VMs"
+
+# Column mapping — must match the spreadsheet headers exactly
+pxt_vmid_column: "VMID"
+pxt_name_column: "Name"
+pxt_tags_column: "Tags"
+
+# Extra columns turned into prefixed tags, e.g. Production -> env-production
+pxt_tag_columns:
+  Environment: "env"
+  Owner: "owner"
+  Application: "app"
+
+# replace = spreadsheet is authoritative, merge = only ever add tags
+pxt_mode: "replace"
+pxt_separator: "-"
+pxt_lowercase: true
+
+# Tags never removed in replace mode (set by other tooling, monitoring, etc.)
+pxt_protected_prefixes: []
+pxt_protected_tags: []
+
+# Guest types to manage: qemu, lxc, or both
+pxt_guest_types:
+  - qemu
+  - lxc
+
+# Safety rails — the run aborts before writing if either is exceeded
+pxt_max_changes: 100
+pxt_max_changed_pct: 40
+
+# Set false to plan and report without writing anything
+pxt_apply: true
+
+# Concurrent API writes; Proxmox is happy at 5-10
+pxt_throttle: 5
+
+# Where the run report is written on the controller
+pxt_report_dir: "{{ playbook_dir }}/reports"
+pxt_report_enabled: true

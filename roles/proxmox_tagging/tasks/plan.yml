@@ -1,0 +1,57 @@
+---
+- name: Diff the spreadsheet against live tags
+  ansible.builtin.set_fact:
+    pxt_plan: >-
+      {{ pxt_rows | tag_plan(pxt_current,
+                             vmid_column=pxt_vmid_column,
+                             name_column=pxt_name_column,
+                             tags_column=pxt_tags_column,
+                             tag_columns=pxt_tag_columns,
+                             separator=pxt_separator,
+                             mode=pxt_mode,
+                             lowercase=pxt_lowercase,
+                             protected_prefixes=pxt_protected_prefixes,
+                             protected_tags=pxt_protected_tags) }}
+
+- name: Show the plan summary
+  ansible.builtin.debug:
+    var: pxt_plan.stats
+
+- name: Show each pending change
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.vmid }} ({{ item.name }} on {{ item.node }}):
+      +{{ item.added | join(',') or '-' }}
+      -{{ item.removed | join(',') or '-' }}
+  loop: "{{ pxt_plan.changes }}"
+  loop_control:
+    label: "{{ item.vmid }}"
+
+- name: Warn about rows that matched no guest
+  ansible.builtin.debug:
+    msg: >-
+      row {{ item.row }} references {{ item.identifier }}, which does not exist
+      in Proxmox
+  loop: "{{ pxt_plan.missing_in_proxmox }}"
+  loop_control:
+    label: "{{ item.identifier }}"
+
+- name: Fail on malformed spreadsheet rows
+  ansible.builtin.fail:
+    msg: >-
+      {{ pxt_plan.invalid_rows | length }} spreadsheet rows are unusable:
+      {{ pxt_plan.invalid_rows }}
+  when: pxt_plan.invalid_rows | length > 0
+
+- name: Enforce the change-volume safety rails
+  ansible.builtin.assert:
+    that:
+      - pxt_plan.stats.changed <= (pxt_max_changes | int)
+      - pxt_plan.stats.changed_pct <= (pxt_max_changed_pct | float)
+    fail_msg: >-
+      plan would change {{ pxt_plan.stats.changed }} guests
+      ({{ pxt_plan.stats.changed_pct }}% of the cluster), above the limits
+      pxt_max_changes={{ pxt_max_changes }} /
+      pxt_max_changed_pct={{ pxt_max_changed_pct }}. Review the spreadsheet, then
+      raise the limits deliberately if the change really is this large.
+    quiet: true

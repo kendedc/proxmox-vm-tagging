@@ -1,0 +1,12 @@
+---
+- name: Play with Ansible
+  hosts: localhost
+  tasks:
+   - name: Just execute df -h
+     ansible.builtin.command: df -h
+     register: output
+     changed_when: output.rc == 0
+
+#   - name: Show stdout
+#     ansible.builtin.debug:
+#      msg: "{{ output.stdout_lines }}"

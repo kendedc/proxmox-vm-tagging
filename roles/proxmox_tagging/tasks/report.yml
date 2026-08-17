@@ -1,0 +1,25 @@
+---
+- name: Ensure the report directory exists
+  ansible.builtin.file:
+    path: "{{ pxt_report_dir }}"
+    state: directory
+    mode: "0755"
+  changed_when: false
+
+- name: Render the run report
+  ansible.builtin.template:
+    src: report.md.j2
+    dest: "{{ pxt_report_dir }}/tagging-{{ ansible_facts.date_time.iso8601_basic_short }}.md"
+    mode: "0644"
+  changed_when: false
+
+- name: Publish the summary as AWX job artifacts
+  ansible.builtin.set_stats:
+    data:
+      pxt_guests: "{{ pxt_plan.stats.guests }}"
+      pxt_changed: "{{ pxt_plan.stats.changed }}"
+      pxt_unchanged: "{{ pxt_plan.stats.unchanged }}"
+      pxt_missing: "{{ pxt_plan.stats.missing_in_proxmox }}"
+      pxt_unmanaged: "{{ pxt_plan.stats.unmanaged }}"
+      pxt_applied: "{{ (pxt_apply | bool) and not ansible_check_mode }}"
+    aggregate: false

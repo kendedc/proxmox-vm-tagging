@@ -1,0 +1,37 @@
+---
+- name: Validate required configuration
+  ansible.builtin.assert:
+    that:
+      - pxt_api_url | length > 0
+      - pxt_api_token_id | length > 0
+      - pxt_api_token_secret | length > 0
+      - pxt_mode in ['replace', 'merge']
+    fail_msg: >-
+      pxt_api_url, pxt_api_token_id and pxt_api_token_secret must be set and
+      pxt_mode must be 'replace' or 'merge'
+    quiet: true
+
+- name: Load desired tags from the spreadsheet
+  ansible.builtin.include_tasks: load_source.yml
+  tags: [source]
+
+- name: Fetch current guest state from Proxmox
+  ansible.builtin.include_tasks: fetch_current.yml
+  tags: [fetch]
+
+- name: Build the change plan
+  ansible.builtin.include_tasks: plan.yml
+  tags: [plan]
+
+- name: Apply tag changes
+  ansible.builtin.include_tasks: apply.yml
+  when:
+    - pxt_apply | bool
+    - not ansible_check_mode
+    - pxt_plan.changes | length > 0
+  tags: [apply]
+
+- name: Write the run report
+  ansible.builtin.include_tasks: report.yml
+  when: pxt_report_enabled | bool
+  tags: [report]
