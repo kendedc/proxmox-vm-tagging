@@ -41,6 +41,7 @@
                 format=pxt_source_format,
                 sheet=pxt_source_sheet,
                 header_row=pxt_source_header_row,
+                header_marker=pxt_vmid_column,
                 encoding=pxt_source_encoding,
                 wantlist=True) }}
 
@@ -53,12 +54,14 @@
   ansible.builtin.assert:
     that:
       - pxt_vmid_column in pxt_rows[0] or pxt_name_column in pxt_rows[0]
-      - (pxt_tag_columns.keys() | list + [pxt_tags_column])
-        | difference(pxt_rows[0].keys() | list) | length == 0
+      - pxt_metadata_columns.keys() | difference(pxt_rows[0].keys() | list)
+        | length == 0
     fail_msg: >-
-      spreadsheet headers {{ pxt_rows[0].keys() | list }} do not cover the
-      configured columns; check pxt_vmid_column, pxt_tags_column and
-      pxt_tag_columns
+      the source has headers {{ pxt_rows[0].keys() | reject('match', '^_')
+      | list }} but pxt_metadata_columns expects
+      {{ pxt_metadata_columns.keys() | difference(pxt_rows[0].keys() | list) }};
+      align pxt_metadata_columns with the headers above (header row was
+      detected with pxt_source_header_row={{ pxt_source_header_row }})
     quiet: true
 
 - name: Report the source size

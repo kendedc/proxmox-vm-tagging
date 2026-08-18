@@ -5,13 +5,13 @@
       - pxt_api_url | length > 0
       - pxt_api_token_id | length > 0
       - pxt_api_token_secret | length > 0
-      - pxt_mode in ['replace', 'merge']
+      - pxt_metadata_columns | length > 0
     fail_msg: >-
-      pxt_api_url, pxt_api_token_id and pxt_api_token_secret must be set and
-      pxt_mode must be 'replace' or 'merge'
+      pxt_api_url, pxt_api_token_id and pxt_api_token_secret must be set, and
+      pxt_metadata_columns must map at least one spreadsheet column
     quiet: true
 
-- name: Load desired tags from the spreadsheet
+- name: Load desired metadata from the spreadsheet
   ansible.builtin.include_tasks: load_source.yml
   tags: [source]
 
@@ -23,7 +23,7 @@
   ansible.builtin.include_tasks: plan.yml
   tags: [plan]
 
-- name: Apply tag changes
+- name: Apply metadata changes
   ansible.builtin.include_tasks: apply.yml
   when:
     - pxt_apply | bool

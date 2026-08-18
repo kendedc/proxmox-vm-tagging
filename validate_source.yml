@@ -1,7 +1,7 @@
 ---
 # Read-only sanity check: parses the spreadsheet and prints the plan, never writes
 # Point an AWX job template at this for the "what would change?" workflow
-- name: Validate the tag spreadsheet against Proxmox
+- name: Validate the metadata spreadsheet against Proxmox
   hosts: localhost
   connection: local
   gather_facts: true

@@ -1,6 +1,7 @@
-VMID,Name,Environment,Owner,Application,Backup,Tags
-100,web-prod-01,Production,platform,nginx,daily,public;tier-web
-101,web-prod-02,Production,platform,nginx,daily,public;tier-web
-200,db-prod-01,Production,dba,postgres,hourly,tier-data;pci
-300,app-uat-01,UAT,app-team,billing,weekly,tier-app
-400,jenkins-01,Development,devops,jenkins,none,
+
+VMID,Name,Host,Type,IP Address,Status,OS,CPU,Memory,Disk,Owner,Environment,Application,Site,Internet Facing,Criticality,Business Service,Contact Group,BackupRequired,SupportVendor
+105,BenWin,server1,VM,10.1.2.200,running,Win10,4,8.0 GB,200G,ben.leung@digitaledgedc.com,PRO,Jumphost for recovery,HKGA1,No,Low,IT DR,ITInfra,No,NA
+134,lhkgautoinv1,server1,VM,10.1.2.54,running,Linux,2,4.0 GB,100G,wai.kwong@digitaledgedc.com,PRO,Proxmox Auto Inventory,HKGA1,No,Low,Infrastructure Automation,ITOps,No,NA
+117,wireguard,server3,VM,,stopped,Linux,4,4.0 GB,50G,Kelvin.chia@digitaledgedc.com,PRO,WireGuard,HKGA1,Yes,Low,Backdoor VPN for Kelvin,Kelvin,No,NA
+106,gideon,server2,VM,,stopped,Linux,4,8.0 GB,100G,Can remove,,,,,,,,,
+136,dns1,server2,Container,10.1.2.41,running,ubuntu,8,2.0 GB,10G,,,,,,,,,,

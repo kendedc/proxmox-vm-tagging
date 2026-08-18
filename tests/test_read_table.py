@@ -89,6 +89,83 @@ class TestCsv:
         assert rows[0]["VMID"] == "100"
 
 
+class TestHeaderAutoDetection:
+    """The sheet's preamble has already changed twice; auto must survive it"""
+
+    def test_headers_on_line_1(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text(HEADER + BODY, encoding="utf-8")
+
+        rows = load(source, header_marker="VMID")
+
+        assert rows[0]["VMID"] == "100"
+        assert rows[0]["_row"] == 2
+
+    def test_spacer_row_then_headers_on_line_2(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text("\n" + HEADER + BODY, encoding="utf-8")
+
+        rows = load(source, header_marker="VMID")
+
+        assert rows[0]["VMID"] == "100"
+        # row numbers stay relative to the file, so the first record is line 3
+        assert rows[0]["_row"] == 3
+
+    def test_title_and_spacer_then_headers_on_line_3(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text("Metadata Standard:,link\n\n" + HEADER + BODY, encoding="utf-8")
+
+        rows = load(source, header_marker="VMID")
+
+        assert rows[0]["VMID"] == "100"
+        assert rows[0]["_row"] == 4
+
+    def test_bom_does_not_defeat_marker_matching(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text("\n" + HEADER + BODY, encoding="utf-8-sig")
+
+        rows = load(source, header_marker="VMID")
+
+        assert rows[0]["VMID"] == "100"
+
+    def test_marker_never_found_is_reported(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text(HEADER + BODY, encoding="utf-8")
+
+        with pytest.raises(AnsibleError, match="no row contains"):
+            load(source, header_marker="GuestID")
+
+    def test_without_a_marker_first_non_empty_row_wins(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text("\n\n" + HEADER + BODY, encoding="utf-8")
+
+        rows = load(source)
+
+        assert rows[0]["VMID"] == "100"
+
+    def test_explicit_row_still_overrides_auto(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text("\n" + HEADER + BODY, encoding="utf-8")
+
+        rows = load(source, header_row=2, header_marker="VMID")
+
+        assert rows[0]["VMID"] == "100"
+
+    def test_header_row_past_end_of_file_is_reported(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text(HEADER, encoding="utf-8")
+
+        with pytest.raises(AnsibleError, match="past the end"):
+            load(source, header_row=99)
+
+    def test_non_numeric_header_row_is_reported(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text(HEADER + BODY, encoding="utf-8")
+
+        with pytest.raises(AnsibleError, match="row number or 'auto'"):
+            load(source, header_row="third")
+
+
 class TestTsv:
     def test_tab_delimited(self, tmp_path):
         source = tmp_path / "tags.tsv"

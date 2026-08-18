@@ -13,7 +13,10 @@ pxt_api_token_secret: ""
 pxt_source_path: "{{ playbook_dir }}/files/vm_tags.csv"
 pxt_source_url: ""
 pxt_source_format: "auto"
-pxt_source_header_row: 1
+
+# 'auto' finds the header row by looking for the VMID column, so title and
+# spacer rows above the table do not matter; pin a number to override
+pxt_source_header_row: "auto"
 
 # utf-8-sig transparently strips the BOM that Excel's "CSV UTF-8" export adds
 pxt_source_encoding: "utf-8-sig"
@@ -21,25 +24,31 @@ pxt_source_encoding: "utf-8-sig"
 # xlsx only — ignored for csv
 pxt_source_sheet: "VMs"
 
-# Column mapping — must match the spreadsheet headers exactly
+# Match key columns
 pxt_vmid_column: "VMID"
 pxt_name_column: "Name"
-pxt_tags_column: "Tags"
 
-# Extra columns turned into prefixed tags, e.g. Production -> env-production
-pxt_tag_columns:
-  Environment: "env"
-  Owner: "owner"
-  Application: "app"
+# Sheet header -> key written into the guest notes, in the order they appear
+# Columns not listed here (Host, Type, IP Address, Status, OS, CPU, Memory,
+# Disk) are facts read from Proxmox, not metadata, so they are never written
+pxt_metadata_columns:
+  Owner: "Owner"
+  Environment: "Environment"
+  Application: "Application"
+  Site: "Site"
+  Internet Facing: "InternetFacing"
+  Criticality: "Criticality"
+  Business Service: "BusinessService"
+  Contact Group: "ContactGroup"
+  BackupRequired: "BackupRequired"
+  SupportVendor: "SupportVendor"
 
-# replace = spreadsheet is authoritative, merge = only ever add tags
-pxt_mode: "replace"
-pxt_separator: "-"
-pxt_lowercase: true
+# Keep any existing notes lines that are not managed Key=Value pairs
+# Set false to make the spreadsheet strictly authoritative over the whole field
+pxt_preserve_unmanaged: true
 
-# Tags never removed in replace mode (set by other tooling, monitoring, etc.)
-pxt_protected_prefixes: []
-pxt_protected_tags: []
+# Write rows whose metadata columns are all blank, clearing the managed keys
+pxt_write_empty: true
 
 # Guest types to manage: qemu, lxc, or both
 pxt_guest_types:
@@ -53,7 +62,7 @@ pxt_max_changed_pct: 40
 # Set false to plan and report without writing anything
 pxt_apply: true
 
-# Concurrent API writes; Proxmox is happy at 5-10
+# Concurrent API calls; Proxmox is happy at 5-10
 pxt_throttle: 5
 
 # Where the run report is written on the controller

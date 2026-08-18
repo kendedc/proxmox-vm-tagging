@@ -1,12 +1,43 @@
 # proxmox-vm-tagging
 
-Reconciles Proxmox VE guest tags against an Excel source of truth. Built to run
-as an AWX job template over a ~400 guest cluster.
+Reconciles Proxmox VE guest **Notes / Description** fields against an Excel
+source of truth. Built to run as an AWX job template over a ~400 guest cluster.
 
-The playbook reads the spreadsheet, fetches every guest's current tags in one
-API call, computes a diff, enforces safety limits, and writes only the guests
-that actually drifted. Nothing is SSH'd into — it is entirely API-driven and
-runs against `localhost`.
+Metadata is written as one `Key=Value` per line:
+
+```
+Owner=wai.kwong@digitaledgedc.com
+Environment=PRO
+Application=Proxmox Auto Inventory
+Site=HKGA1
+InternetFacing=No
+Criticality=Low
+BusinessService=Infrastructure Automation
+ContactGroup=ITOps
+BackupRequired=No
+SupportVendor=NA
+```
+
+The playbook reads the spreadsheet, matches rows to live guests, reads their
+current notes, computes a diff, enforces safety limits, and writes only the
+guests that actually drifted. Nothing is SSH'd into — it is entirely API-driven
+and runs against `localhost`.
+
+## Why notes and not tags
+
+Proxmox tags are restricted to `[a-zA-Z0-9_][a-zA-Z0-9_\-+.]*` — no `=`, no
+`@`, no spaces — and render as chips on one line, not as separate lines. So
+`Owner=wai.kwong@digitaledgedc.com`, `Application=Proxmox Auto Inventory` and
+`BusinessService=Infrastructure Automation` cannot be expressed as tags without
+mangling them beyond recognition.
+
+The Notes field has no such limits, which is why it is the conventional home for
+CMDB metadata in Proxmox. **Guest tags are never touched by this playbook.**
+
+If you later want tag-based filtering in the UI as well, the right move is to
+derive a small set of sanitized tags (`env-pro`, `site-hkga1`,
+`criticality-low`) from the safe columns — additive, and it leaves the notes
+alone.
 
 ## Layout
 
@@ -22,10 +53,10 @@ inventory/group_vars/all.yml    site configuration (no secrets)
 files/vm_tags.csv               your source of truth (not in git yet)
 roles/proxmox_tagging/
   lookup_plugins/read_table.py  csv/tsv/xlsx -> list of row dicts
-  filter_plugins/tag_plan.py    diff engine (source vs live tags)
+  filter_plugins/metadata_plan.py  diff engine (source vs live notes)
   tasks/                        load_source, fetch_current, plan, apply, report
 scripts/make_example_source.py  regenerates files/vm_tags.example.{csv,xlsx}
-tests/                          34 unit tests
+tests/                          50 unit tests
 ```
 
 The playbooks live at the repo root and the plugins live inside the role on
@@ -35,23 +66,58 @@ depends on `ansible.cfg` being honoured. That is what makes it portable to AWX.
 
 ## Source file format
 
-`files/vm_tags.example.csv` (or `.xlsx`, sheet `VMs`):
+See `files/vm_tags.example.csv` (or `.xlsx`, sheet `VMs`).
 
-| VMID | Name | Environment | Owner | Application | Backup | Tags |
-|---|---|---|---|---|---|---|
-| 100 | web-prod-01 | Production | platform | nginx | daily | public;tier-web |
+**The header row is found automatically.** `pxt_source_header_row: "auto"`
+scans for the first row containing the `VMID` column, so it does not matter
+whether the export keeps the "Metadata Standard:" title, keeps only the spacer
+row, or starts straight at the headers — all three read identically. Pin a
+number instead of `"auto"` if you ever need to force it.
 
-- **VMID** is the match key. If blank, **Name** is used instead; an ambiguous
+Reported row numbers stay relative to the source file, so a row logged as
+`row 3` is line 3 of the CSV.
+
+Two columns are match keys:
+
+- **VMID** — the primary key. If blank, **Name** is used instead; an ambiguous
   name fails the run rather than guessing.
-- **Environment / Owner / Application / Backup** become prefixed tags —
-  `Production` under `Environment` becomes `env-production`. The mapping lives
-  in `pxt_tag_columns`.
-- **Tags** is a free-form column, split on `,` `;` `|` or newline, for tags that
-  do not belong to a category.
-- Values are normalized to Proxmox-legal tags: spaces and illegal characters
-  become `-`, and everything is lowercased by default. Proxmox de-duplicates
-  tags case-insensitively unless `tag-style: case-sensitive=1` is set in
-  `datacenter.cfg`, so leave `pxt_lowercase: true` unless you have set that.
+
+Ten columns become notes, in this order, via `pxt_metadata_columns`:
+
+| Sheet header | Note key |
+|---|---|
+| `Owner` | `Owner` |
+| `Environment` | `Environment` |
+| `Application` | `Application` |
+| `Site` | `Site` |
+| `Internet Facing` | `InternetFacing` |
+| `Criticality` | `Criticality` |
+| `Business Service` | `BusinessService` |
+| `Contact Group` | `ContactGroup` |
+| `BackupRequired` | `BackupRequired` |
+| `SupportVendor` | `SupportVendor` |
+
+The left column must match your headers **exactly**. If any is missing the run
+fails and prints the headers it actually found, so a rename is a one-line fix in
+`inventory/group_vars/all.yml`.
+
+Everything else in the sheet — `Host`, `Type`, `IP Address`, `Status`, `OS`,
+`CPU`, `Memory`, `Disk` — is a fact read *from* Proxmox, not metadata, and is
+never written back.
+
+### Behaviour rules
+
+- **Blank cells are omitted**, not written as `Owner=`. A row where every
+  metadata column is blank clears the managed keys entirely — set
+  `pxt_write_empty: false` to skip such rows instead.
+- **Free text is written literally.** `Owner=Can remove` and `Owner=No idea`
+  go in as-is, because the sheet is the source of truth.
+- **Existing non-managed note lines are preserved** and re-appended below the
+  managed block. If a VM's notes say `migrated from esxi 2024-03`, that line
+  survives. Set `pxt_preserve_unmanaged: false` to make the spreadsheet
+  authoritative over the whole field instead.
+- **Key order is the config order**, not alphabetical, so notes are stable and
+  re-runs are genuinely idempotent.
 
 ### CSV or xlsx?
 
@@ -78,8 +144,8 @@ Two Excel-export gotchas, both handled:
   `utf-8-sig`, which strips it. Plain "CSV" export on Windows writes cp1252
   instead — set `pxt_source_encoding: cp1252` if you get a decode error.
 - Excel eats leading zeros and reformats anything that looks like a date. VMIDs
-  are integers so they are safe, but format the `Tags` column as **Text** if a
-  value could ever look like a date or a number.
+  are integers so they are safe, but format any column as **Text** if a value
+  could ever look like a date or a number.
 
 ## Running locally
 
@@ -112,8 +178,10 @@ need installing for the default path.
 | `pxt_source_url` | `""` | download the table per run instead of reading the checkout |
 | `pxt_source_encoding` | `utf-8-sig` | set `cp1252` for a non-UTF-8 Excel export |
 | `pxt_source_sheet` | `VMs` | xlsx only, ignored for csv |
-| `pxt_mode` | `replace` | `replace` = sheet is authoritative; `merge` = only ever adds |
-| `pxt_protected_prefixes` | `[]` | tag prefixes never removed in replace mode |
+| `pxt_source_header_row` | `"auto"` | header row; `auto` finds it via the VMID column |
+| `pxt_metadata_columns` | 10 columns | sheet header -> note key, in write order |
+| `pxt_preserve_unmanaged` | `true` | keep existing non-managed note lines |
+| `pxt_write_empty` | `true` | write rows whose metadata is entirely blank |
 | `pxt_max_changes` | `100` | abort before writing if more guests than this would change |
 | `pxt_max_changed_pct` | `40` | same guard, as a percentage of the cluster |
 | `pxt_apply` | `true` | set false to plan only |
@@ -121,7 +189,8 @@ need installing for the default path.
 | `pxt_guest_types` | `[qemu, lxc]` | which guest types to manage |
 
 The two `pxt_max_*` guards exist because a broken spreadsheet — a shifted
-column, a bad export — would otherwise retag the whole cluster in one run. They
+column, a bad export — would otherwise rewrite notes across the whole cluster in
+one run. They
 are deliberately low; raise them consciously for a large planned migration.
 
 ## Proxmox API token
@@ -135,7 +204,7 @@ pveum aclmod / -user ansible@pve -role TagManager
 pveum user token add ansible@pve tagging --privsep 0
 ```
 
-`VM.Audit` covers the read, `VM.Config.Options` covers the tag write.
+`VM.Audit` covers the read, `VM.Config.Options` covers the notes write.
 
 ## Getting this repo onto AWX
 
@@ -149,7 +218,7 @@ Gitea/bare repo on your own network. Then create the Project with SCM Type
 `Git`, set the URL, and enable *Update Revision on Launch*.
 
 This is the option to pick. The spreadsheet is committed alongside the
-playbook, so the Git history becomes the audit trail for tag changes, and AWX
+playbook, so the Git history becomes the audit trail for metadata changes, and AWX
 re-syncs on every launch — no copying files onto the VM ever again.
 
 If the AWX VM has no route to a Git host, a bare repo on the VM itself works:
@@ -248,25 +317,33 @@ changes for free.
 ## Tests
 
 ```bash
-pytest tests/ -q      # 34 tests
+pytest tests/ -q      # 50 tests
 ```
 
 Two areas, both chosen because they are where the risk is:
 
-- **`tag_plan`** — normalization, replace vs merge, protected tags, unmatched
-  rows, duplicate and malformed VMIDs, LXC vs QEMU routing.
-- **`read_table`** — BOM stripping, cp1252 exports, quoted fields containing
-  commas, blank rows, header offsets, and the openpyxl float-to-`100.0` trap.
+- **`metadata_plan`** — note rendering and parsing, idempotency, blank-cell
+  omission, free-text preservation, unmatched rows, duplicate and malformed
+  VMIDs, LXC vs QEMU routing.
+- **`read_table`** — header auto-detection across all three preamble layouts,
+  BOM stripping, cp1252 exports, quoted fields containing commas, blank rows,
+  and the openpyxl float-to-`100.0` trap.
 
-## Why the raw API instead of `community.general.proxmox_kvm`
+## API call volume
 
-`proxmox_kvm` with `update: true` works, but it re-sends the whole guest config
-per VM and its change reporting is unreliable for tags alone. Talking to
-`/nodes/{node}/{type}/{vmid}/config` directly means one read for the entire
-cluster, writes only for genuinely drifted guests, exact control over
-merge semantics, and no `proxmoxer` dependency. At 400 guests that is one GET
-plus N PUTs where N is usually single digits.
+`/cluster/resources` does not return descriptions, so current notes have to be
+read per guest:
 
-Swap in `community.general.proxmox_kvm` in `roles/proxmox_tagging/tasks/apply.yml`
-if you would rather stay on the maintained module — the plan structure feeds it
-unchanged.
+- 1 GET for the cluster index
+- 1 GET per guest **listed in the spreadsheet** (not per guest in the cluster)
+- 1 PUT per guest whose notes actually drifted
+
+At 400 rows that is ~401 reads and usually a handful of writes, throttled to
+`pxt_throttle` (5) concurrent requests. A steady-state run where nothing changed
+still costs the 401 reads; that is the price of accurate drift detection, and it
+is why the nightly job should be the dry run rather than the apply.
+
+`community.general.proxmox_kvm` is not used because it re-sends the whole guest
+config per VM and its change reporting is unreliable for a single field. Talking
+to `/nodes/{node}/{type}/{vmid}/config` directly gives exact control over merge
+semantics and drops the `proxmoxer` dependency.

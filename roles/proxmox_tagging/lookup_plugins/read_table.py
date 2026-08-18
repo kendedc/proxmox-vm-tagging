@@ -28,9 +28,18 @@ options:
     type: str
     default: null
   header_row:
-    description: 1-indexed row holding the column headers
-    type: int
-    default: 1
+    description:
+      - 1-indexed row holding the column headers, or C(auto) to find it.
+      - C(auto) scans for the first row containing O(header_marker), which
+        makes the reader tolerant of title and spacer rows above the table.
+    type: raw
+    default: auto
+  header_marker:
+    description:
+      - Column name that identifies the header row when O(header_row=auto).
+      - With no marker, the first non-empty row is treated as the header.
+    type: str
+    default: null
   delimiter:
     description: Field delimiter override for csv/tsv
     type: str
@@ -104,29 +113,62 @@ def _build_headers(header_cells):
     return tuple(headers)
 
 
-def _rows_to_records(raw_rows, header_row, skip_empty, source):
-    """Turn an iterable of cell tuples into header-keyed dicts"""
-    headers = None
-    records = []
-    for row_number, row in enumerate(raw_rows, start=1):
-        if row_number < header_row:
-            continue
-        if row_number == header_row:
-            headers = _build_headers(row)
-            continue
+def _find_header_row(rows, marker, source):
+    """Locate the header row by marker column, tolerating title and spacer rows"""
+    for index, row in enumerate(rows, start=1):
+        values = [_cell_to_text(cell) for cell in row]
+        if marker:
+            if marker in values:
+                return index
+        elif any(values):
+            return index
 
+    raise AnsibleError(
+        "could not find a header row in {0}: no row contains {1!r}. Check the "
+        "file, or pin the row number with pxt_source_header_row".format(
+            source, marker
+        )
+        if marker
+        else "could not find a non-empty header row in {0}".format(source)
+    )
+
+
+def _resolve_header_row(rows, header_row, marker, source):
+    """Turn the header_row option into a concrete 1-indexed row number"""
+    if str(header_row or "auto").strip().lower() == "auto":
+        return _find_header_row(rows, marker, source)
+
+    try:
+        return int(header_row)
+    except (TypeError, ValueError):
+        raise AnsibleError(
+            "header_row must be a row number or 'auto', got {0!r}".format(header_row)
+        )
+
+
+def _rows_to_records(raw_rows, header_row, marker, skip_empty, source):
+    """Turn an iterable of cell tuples into header-keyed dicts"""
+    rows = list(raw_rows)
+    header_index = _resolve_header_row(rows, header_row, marker, source)
+
+    if header_index > len(rows):
+        raise AnsibleError(
+            "header row {0} is past the end of {1}, which has {2} rows".format(
+                header_index, source, len(rows)
+            )
+        )
+
+    headers = _build_headers(rows[header_index - 1])
+    records = []
+    for offset, row in enumerate(rows[header_index:], start=header_index + 1):
         values = [_cell_to_text(cell) for cell in row]
         if skip_empty and not any(values):
             continue
 
         record = dict(zip(headers, values))
-        record["_row"] = row_number
+        record["_row"] = offset
         records.append(record)
 
-    if headers is None:
-        raise AnsibleError(
-            "header row {0} not found in {1}".format(header_row, source)
-        )
     return records
 
 
@@ -178,7 +220,11 @@ class LookupModule(LookupBase):
             )
 
         return _rows_to_records(
-            raw_rows, self.get_option("header_row"), self.get_option("skip_empty"), path
+            raw_rows,
+            self.get_option("header_row"),
+            self.get_option("header_marker"),
+            self.get_option("skip_empty"),
+            path,
         )
 
     def _read_xlsx(self, path):
@@ -215,6 +261,7 @@ class LookupModule(LookupBase):
             return _rows_to_records(
                 worksheet.iter_rows(values_only=True),
                 self.get_option("header_row"),
+                self.get_option("header_marker"),
                 self.get_option("skip_empty"),
                 path,
             )
