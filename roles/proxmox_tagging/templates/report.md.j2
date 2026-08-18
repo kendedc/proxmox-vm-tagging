@@ -1,13 +1,13 @@
-# Proxmox tagging run — {{ ansible_facts.date_time.iso8601 }}
+# Proxmox metadata run — {{ ansible_facts.date_time.iso8601 }}
 
-- Source: `{{ pxt_workbook }}` sheet `{{ pxt_source_sheet }}` ({{ pxt_plan.stats.rows }} rows)
+- Source: `{{ pxt_workbook }}` ({{ pxt_plan.stats.targets }} matched rows)
 - Cluster: `{{ pxt_api_url }}` ({{ pxt_plan.stats.guests }} guests)
-- Mode: `{{ pxt_mode }}`
+- Preserve unmanaged note lines: {{ 'yes' if pxt_preserve_unmanaged else 'no' }}
 - Applied: {{ 'yes' if (pxt_apply | bool) and not ansible_check_mode else 'no (dry run)' }}
 
 | Metric | Count |
 |---|---|
-| Changed | {{ pxt_plan.stats.changed }} |
+| Notes rewritten | {{ pxt_plan.stats.changed }} |
 | Already correct | {{ pxt_plan.stats.unchanged }} |
 | In sheet, not in Proxmox | {{ pxt_plan.stats.missing_in_proxmox }} |
 | In Proxmox, not in sheet | {{ pxt_plan.stats.unmanaged }} |
@@ -15,10 +15,25 @@
 {% if pxt_plan.changes %}
 ## Changes
 
-| VMID | Name | Node | Added | Removed | Resulting tags |
-|---|---|---|---|---|---|
 {% for change in pxt_plan.changes %}
-| {{ change.vmid }} | {{ change.name }} | {{ change.node }} | {{ change.added | join(', ') or '—' }} | {{ change.removed | join(', ') or '—' }} | {{ change.desired_tags | join(', ') or '—' }} |
+### {{ change.vmid }} — {{ change.name }} ({{ change.node }}, {{ change.type }}, sheet row {{ change.row }})
+
+{% if change.preserved_lines %}
+Preserved {{ change.preserved_lines | length }} existing free-text line(s).
+{% endif %}
+
+Before:
+
+```
+{{ change.current_notes if change.current_notes else '(empty)' }}
+```
+
+After:
+
+```
+{{ change.desired_notes if change.desired_notes else '(empty)' }}
+```
+
 {% endfor %}
 {% endif %}
 
@@ -35,9 +50,9 @@
 {% if pxt_plan.unmanaged %}
 ## Guests absent from the spreadsheet
 
-| VMID | Name | Current tags |
-|---|---|---|
+| VMID | Name |
+|---|---|
 {% for guest in pxt_plan.unmanaged %}
-| {{ guest.vmid }} | {{ guest.name }} | {{ guest.tags | join(', ') or '—' }} |
+| {{ guest.vmid }} | {{ guest.name }} |
 {% endfor %}
 {% endif %}

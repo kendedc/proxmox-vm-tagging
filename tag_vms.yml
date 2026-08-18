@@ -1,7 +1,7 @@
 ---
-# Reconcile Proxmox guest tags from the Excel source of truth
+# Reconcile Proxmox guest notes from the Excel source of truth
 # Everything runs against the Proxmox API from the controller — no SSH to guests
-- name: Reconcile Proxmox VM tags
+- name: Reconcile Proxmox VM metadata
   hosts: localhost
   connection: local
   gather_facts: true

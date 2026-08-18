@@ -17,6 +17,7 @@
   ansible.builtin.set_stats:
     data:
       pxt_guests: "{{ pxt_plan.stats.guests }}"
+      pxt_targets: "{{ pxt_plan.stats.targets }}"
       pxt_changed: "{{ pxt_plan.stats.changed }}"
       pxt_unchanged: "{{ pxt_plan.stats.unchanged }}"
       pxt_missing: "{{ pxt_plan.stats.missing_in_proxmox }}"

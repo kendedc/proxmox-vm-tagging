@@ -5,23 +5,27 @@ pxt_api_url: "https://pve01.example.com:8006"
 pxt_validate_certs: true
 
 pxt_source_path: "{{ playbook_dir }}/files/vm_tags.csv"
+pxt_source_header_row: "auto"
 
 pxt_vmid_column: "VMID"
 pxt_name_column: "Name"
-pxt_tags_column: "Tags"
 
-pxt_tag_columns:
-  Environment: "env"
-  Owner: "owner"
-  Application: "app"
-  Backup: "backup"
+# Left-hand side must match the spreadsheet headers exactly; the run fails and
+# prints the headers it actually found if any of these are missing
+pxt_metadata_columns:
+  Owner: "Owner"
+  Environment: "Environment"
+  Application: "Application"
+  Site: "Site"
+  Internet Facing: "InternetFacing"
+  Criticality: "Criticality"
+  Business Service: "BusinessService"
+  Contact Group: "ContactGroup"
+  BackupRequired: "BackupRequired"
+  SupportVendor: "SupportVendor"
 
-pxt_mode: "replace"
-
-# Tags applied by other tooling that this playbook must not remove
-pxt_protected_prefixes:
-  - "pve-"
-  - "monitoring-"
+pxt_preserve_unmanaged: true
+pxt_write_empty: true
 
 pxt_max_changes: 100
 pxt_max_changed_pct: 40
