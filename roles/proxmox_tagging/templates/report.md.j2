@@ -3,7 +3,7 @@
 - Source: `{{ pxt_workbook }}` ({{ pxt_plan.stats.targets }} matched rows)
 - Cluster: `{{ pxt_api_url }}` ({{ pxt_plan.stats.guests }} guests)
 - Preserve unmanaged note lines: {{ 'yes' if pxt_preserve_unmanaged else 'no' }}
-- Applied: {{ 'yes' if (pxt_apply | bool) and not ansible_check_mode else 'no (dry run)' }}
+- Applied: {{ 'yes' if not (pxt_dry_run | bool) and not ansible_check_mode else 'no (dry run)' }}
 
 | Metric | Count |
 |---|---|

@@ -8,7 +8,7 @@
   become: false
 
   vars:
-    pxt_apply: false
+    pxt_dry_run: true
 
   roles:
     - role: proxmox_tagging

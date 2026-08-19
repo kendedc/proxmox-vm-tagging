@@ -59,8 +59,9 @@ pxt_guest_types:
 pxt_max_changes: 100
 pxt_max_changed_pct: 40
 
-# Set false to plan and report without writing anything
-pxt_apply: true
+# true plans and reports without writing; false performs the real run
+# Defaults to a dry run so anything that forgets to set it cannot write
+pxt_dry_run: true
 
 # Concurrent API calls; Proxmox is happy at 5-10
 pxt_throttle: 5

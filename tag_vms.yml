@@ -7,5 +7,10 @@
   gather_facts: true
   become: false
 
+  vars:
+    # This is the write playbook, so opt out of the safe default
+    # Still overridable with -e pxt_dry_run=true to preview
+    pxt_dry_run: false
+
   roles:
     - role: proxmox_tagging
