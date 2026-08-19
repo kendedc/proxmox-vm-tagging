@@ -184,7 +184,7 @@ need installing for the default path.
 | `pxt_write_empty` | `true` | write rows whose metadata is entirely blank |
 | `pxt_max_changes` | `100` | abort before writing if more guests than this would change |
 | `pxt_max_changed_pct` | `40` | same guard, as a percentage of the cluster |
-| `pxt_apply` | `true` | set false to plan only |
+| `pxt_dry_run` | `true` | `true` plans only; `false` writes. `tag_vms.yml` sets it `false` |
 | `pxt_throttle` | `5` | concurrent API writes |
 | `pxt_guest_types` | `[qemu, lxc]` | which guest types to manage |
 

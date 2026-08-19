@@ -22,5 +22,5 @@
       pxt_unchanged: "{{ pxt_plan.stats.unchanged }}"
       pxt_missing: "{{ pxt_plan.stats.missing_in_proxmox }}"
       pxt_unmanaged: "{{ pxt_plan.stats.unmanaged }}"
-      pxt_applied: "{{ (pxt_apply | bool) and not ansible_check_mode }}"
+      pxt_applied: "{{ not (pxt_dry_run | bool) and not ansible_check_mode }}"
     aggregate: false
