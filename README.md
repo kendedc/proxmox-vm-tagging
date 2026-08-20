@@ -42,8 +42,7 @@ alone.
 ## Layout
 
 ```
-tag_vms.yml                     reconcile and write
-validate_source.yml             dry run, report only
+tag_vms.yml                     the only playbook; dry run unless told otherwise
 ansible.cfg                     local convenience only; AWX does not need it
 execution-environment.yml       custom EE definition (xlsx path only)
 collections/requirements.yml    optional collections, auto-installed by AWX
@@ -153,19 +152,21 @@ Two Excel-export gotchas, both handled:
 python3 -m venv .venv && . .venv/bin/activate
 pip install ansible-core pytest      # add openpyxl only for the xlsx path
 
-# dry run — prints the plan, writes nothing
-ansible-playbook validate_source.yml \
+# dry run — prints the plan, writes nothing. This is the default
+ansible-playbook tag_vms.yml \
   -e pxt_api_token_id='ansible@pve!tagging' \
   -e pxt_api_token_secret="$PVE_TOKEN"
 
-# apply
+# apply — writing takes an explicit opt-in
 ansible-playbook tag_vms.yml \
+  -e pxt_dry_run=false \
   -e pxt_api_token_id='ansible@pve!tagging' \
   -e pxt_api_token_secret="$PVE_TOKEN"
 ```
 
-`--check` also works and behaves like `validate_source.yml`. No collections
-need installing for the default path.
+There is one playbook. `pxt_dry_run` defaults to `true`, so a run that forgets
+to set it reports instead of writing. `--check` also forces a dry run. No
+collections need installing for the default path.
 
 ## Key variables
 
@@ -294,8 +295,11 @@ usually break a project moved into AWX are both designed around here:
 4. **Inventory** — a static inventory containing only `localhost`, with
    `ansible_connection=local`. Everything is API-driven; AWX never touches a
    guest over SSH.
-5. **Job templates** — one on `validate_source.yml` (dry run) and one on
-   `tag_vms.yml` (apply), both with the credential attached.
+5. **Job templates** — two, both on `tag_vms.yml` and both with the credential
+   attached. They differ only in extra vars: the dry-run template sets
+   `pxt_dry_run: true`, the apply template sets `pxt_dry_run: false`. Writing is
+   an explicit opt-in, so a misconfigured template reports rather than writes.
+   Restrict *Execute* on the apply template with AWX RBAC.
 6. **Workflow** — chain dry run → approval node → apply. The approval node is
    what makes the 400 VM blast radius reviewable before it lands.
 7. **Schedule** — run the dry run nightly to surface drift; keep the apply

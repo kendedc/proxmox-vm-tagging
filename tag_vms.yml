@@ -1,16 +1,14 @@
 ---
 # Reconcile Proxmox guest notes from the Excel source of truth
 # Everything runs against the Proxmox API from the controller — no SSH to guests
+#
+# Dry run by default. Writing requires an explicit pxt_dry_run=false, which the
+# AWX apply template supplies; locally that is -e pxt_dry_run=false
 - name: Reconcile Proxmox VM metadata
   hosts: localhost
   connection: local
   gather_facts: true
   become: false
-
-  vars:
-    # This is the write playbook, so opt out of the safe default
-    # Still overridable with -e pxt_dry_run=true to preview
-    pxt_dry_run: false
 
   roles:
     - role: proxmox_tagging
