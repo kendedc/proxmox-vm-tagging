@@ -42,7 +42,7 @@ alone.
 ## Layout
 
 ```
-tag_vms.yml                     the only playbook; dry run unless told otherwise
+sync_vm_metadata.yml            the only playbook; dry run unless told otherwise
 ansible.cfg                     local convenience only; AWX does not need it
 execution-environment.yml       custom EE definition (xlsx path only)
 collections/requirements.yml    optional collections, auto-installed by AWX
@@ -153,12 +153,12 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install ansible-core pytest      # add openpyxl only for the xlsx path
 
 # dry run — prints the plan, writes nothing. This is the default
-ansible-playbook tag_vms.yml \
+ansible-playbook sync_vm_metadata.yml \
   -e pxt_api_token_id='ansible@pve!tagging' \
   -e pxt_api_token_secret="$PVE_TOKEN"
 
 # apply — writing takes an explicit opt-in
-ansible-playbook tag_vms.yml \
+ansible-playbook sync_vm_metadata.yml \
   -e pxt_dry_run=false \
   -e pxt_api_token_id='ansible@pve!tagging' \
   -e pxt_api_token_secret="$PVE_TOKEN"
@@ -185,7 +185,7 @@ collections need installing for the default path.
 | `pxt_write_empty` | `true` | write rows whose metadata is entirely blank |
 | `pxt_max_changes` | `100` | abort before writing if more guests than this would change |
 | `pxt_max_changed_pct` | `40` | same guard, as a percentage of the cluster |
-| `pxt_dry_run` | `true` | `true` plans only; `false` writes. `tag_vms.yml` sets it `false` |
+| `pxt_dry_run` | `true` | `true` plans only; `false` writes. Writing is an explicit opt-in |
 | `pxt_throttle` | `5` | concurrent API writes |
 | `pxt_guest_types` | `[qemu, lxc]` | which guest types to manage |
 
@@ -295,7 +295,7 @@ usually break a project moved into AWX are both designed around here:
 4. **Inventory** — a static inventory containing only `localhost`, with
    `ansible_connection=local`. Everything is API-driven; AWX never touches a
    guest over SSH.
-5. **Job templates** — two, both on `tag_vms.yml` and both with the credential
+5. **Job templates** — two, both on `sync_vm_metadata.yml` and both with the credential
    attached. They differ only in extra vars: the dry-run template sets
    `pxt_dry_run: true`, the apply template sets `pxt_dry_run: false`. Writing is
    an explicit opt-in, so a misconfigured template reports rather than writes.
