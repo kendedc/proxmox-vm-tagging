@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: proxmox_tagging
   author: Infrastructure Team
-  description: Reconcile Proxmox VE guest tags from an Excel source of truth
+  description: Reconcile Proxmox VE guest notes from a csv source of truth
   license: MIT
   min_ansible_version: "2.15"
   platforms:

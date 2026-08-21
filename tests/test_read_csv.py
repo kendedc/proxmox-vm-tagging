@@ -1,4 +1,4 @@
-"""Unit tests for the read_table lookup — csv, tsv and Excel export quirks."""
+"""Unit tests for the read_csv lookup — parsing and Excel export quirks."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ BODY = "100,web-prod-01,Production,web;public\n200,db-prod-01,Production,tier-da
 
 def load(path, **options):
     """Run the lookup the way Ansible would, with options applied"""
-    lookup = lookup_loader.get("read_table", loader=DataLoader())
+    lookup = lookup_loader.get("read_csv", loader=DataLoader())
     return lookup.run([str(path)], variables={}, **options)
 
 
@@ -166,29 +166,41 @@ class TestHeaderAutoDetection:
             load(source, header_row="third")
 
 
-class TestTsv:
-    def test_tab_delimited(self, tmp_path):
-        source = tmp_path / "tags.tsv"
-        source.write_text("VMID\tName\n100\tweb-01\n", encoding="utf-8")
+class TestSemicolonDelimiter:
+    """A non-English Excel writes csv with semicolons, still csv"""
 
-        rows = load(source)
+    def test_semicolon_delimited(self, tmp_path):
+        source = tmp_path / "tags.csv"
+        source.write_text("VMID;Name\n100;web-01\n", encoding="utf-8")
+
+        rows = load(source, delimiter=";")
 
         assert rows[0]["Name"] == "web-01"
 
 
-class TestFormatResolution:
-    def test_unknown_extension_is_rejected(self, tmp_path):
-        source = tmp_path / "tags.dat"
-        source.write_text(HEADER, encoding="utf-8")
+class TestCsvOnly:
+    """Anything that is not a .csv must fail loudly, not parse as garbage"""
 
-        with pytest.raises(AnsibleError, match="cannot infer a format"):
+    def test_xlsx_is_rejected(self, tmp_path):
+        source = tmp_path / "tags.xlsx"
+        source.write_bytes(b"PK\x03\x04binary workbook")
+
+        with pytest.raises(AnsibleError, match="not a .csv file"):
             load(source)
 
-    def test_explicit_format_overrides_extension(self, tmp_path):
-        source = tmp_path / "tags.dat"
-        source.write_text(HEADER + BODY, encoding="utf-8")
+    def test_tsv_is_rejected(self, tmp_path):
+        source = tmp_path / "tags.tsv"
+        source.write_text("VMID\tName\n100\tweb-01\n", encoding="utf-8")
 
-        assert len(load(source, format="csv")) == 2
+        with pytest.raises(AnsibleError, match="not a .csv file"):
+            load(source)
+
+    def test_the_error_names_the_excel_export_option(self, tmp_path):
+        source = tmp_path / "tags.xlsx"
+        source.write_bytes(b"PK\x03\x04")
+
+        with pytest.raises(AnsibleError, match="CSV UTF-8"):
+            load(source)
 
     def test_missing_header_row_is_reported(self, tmp_path):
         source = tmp_path / "tags.csv"
@@ -196,31 +208,3 @@ class TestFormatResolution:
 
         with pytest.raises(AnsibleError, match="header row"):
             load(source)
-
-
-class TestXlsx:
-    def test_reads_a_worksheet(self, tmp_path):
-        openpyxl = pytest.importorskip("openpyxl")
-
-        source = tmp_path / "tags.xlsx"
-        workbook = openpyxl.Workbook()
-        sheet = workbook.active
-        sheet.title = "VMs"
-        sheet.append(("VMID", "Name", "Tags"))
-        sheet.append((100, "web-prod-01", "web;public"))
-        workbook.save(source)
-
-        rows = load(source, sheet="VMs")
-
-        # openpyxl returns 100 as a float; it must not become '100.0'
-        assert rows[0]["VMID"] == "100"
-        assert rows[0]["Name"] == "web-prod-01"
-
-    def test_unknown_sheet_is_reported(self, tmp_path):
-        openpyxl = pytest.importorskip("openpyxl")
-
-        source = tmp_path / "tags.xlsx"
-        openpyxl.Workbook().save(source)
-
-        with pytest.raises(AnsibleError, match="not found"):
-            load(source, sheet="Missing")

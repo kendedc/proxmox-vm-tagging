@@ -9,10 +9,9 @@ pxt_api_token_id: ""
 pxt_api_token_secret: ""
 
 # Source table: a path inside the project, or a URL to download first
-# csv needs no extra dependency; xlsx additionally needs openpyxl in the EE
+# csv is the only supported format, and it needs no dependency beyond stdlib
 pxt_source_path: "{{ playbook_dir }}/files/vm_tags.csv"
 pxt_source_url: ""
-pxt_source_format: "auto"
 
 # 'auto' finds the header row by looking for the VMID column, so title and
 # spacer rows above the table do not matter; pin a number to override
@@ -21,8 +20,8 @@ pxt_source_header_row: "auto"
 # utf-8-sig transparently strips the BOM that Excel's "CSV UTF-8" export adds
 pxt_source_encoding: "utf-8-sig"
 
-# xlsx only — ignored for csv
-pxt_source_sheet: "VMs"
+# Set to ';' for an Excel export from a non-English locale
+pxt_source_delimiter: ","
 
 # Match key columns
 pxt_vmid_column: "VMID"

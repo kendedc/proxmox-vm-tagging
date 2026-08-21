@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the example metadata source in both csv and xlsx form.
+"""Generate the example metadata source csv.
 
 Mirrors the exported sheet: a spacer row, headers on row 2, data from row 3.
 """
@@ -52,32 +52,9 @@ def write_csv(path):
     print("wrote {0}".format(path))
 
 
-def write_xlsx(path):
-    """Write the example workbook, skipped when openpyxl is unavailable"""
-    try:
-        from openpyxl import Workbook
-    except ImportError:
-        print("skipping {0}: openpyxl not installed".format(path))
-        return
-
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "VMs"
-    for row in PREAMBLE:
-        sheet.append(row)
-    sheet.append(HEADERS)
-    for row in ROWS:
-        sheet.append(row)
-    sheet.freeze_panes = "A3"
-
-    workbook.save(path)
-    print("wrote {0}".format(path))
-
-
 def main():
     FILES_DIR.mkdir(parents=True, exist_ok=True)
     write_csv(FILES_DIR / "vm_tags.example.csv")
-    write_xlsx(FILES_DIR / "vm_tags.example.xlsx")
 
 
 if __name__ == "__main__":
