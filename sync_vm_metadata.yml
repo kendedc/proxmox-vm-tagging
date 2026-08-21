@@ -1,5 +1,5 @@
 ---
-# Reconcile Proxmox guest notes from the Excel source of truth
+# Reconcile Proxmox guest notes from the csv export of the Excel source of truth
 # Everything runs against the Proxmox API from the controller — no SSH to guests
 #
 # Dry run by default. Writing requires an explicit pxt_dry_run=false, which the

@@ -1,7 +1,8 @@
 # proxmox-vm-tagging
 
-Reconciles Proxmox VE guest **Notes / Description** fields against an Excel
-source of truth. Built to run as an AWX job template over a ~400 guest cluster.
+Reconciles Proxmox VE guest **Notes / Description** fields against a CSV export
+of the Excel source of truth. Built to run as an AWX job template over a ~400
+guest cluster.
 
 Metadata is written as one `Key=Value` per line:
 
@@ -44,18 +45,16 @@ alone.
 ```
 sync_vm_metadata.yml            the only playbook; dry run unless told otherwise
 ansible.cfg                     local convenience only; AWX does not need it
-execution-environment.yml       custom EE definition (xlsx path only)
 collections/requirements.yml    optional collections, auto-installed by AWX
-requirements.txt                optional Python deps (xlsx path only)
 inventory/localhost.yml         single local host
 inventory/group_vars/all.yml    site configuration (no secrets)
 files/vm_tags.csv               your source of truth (not in git yet)
 roles/proxmox_tagging/
-  lookup_plugins/read_table.py  csv/tsv/xlsx -> list of row dicts
+  lookup_plugins/read_csv.py    csv -> list of row dicts
   filter_plugins/metadata_plan.py  diff engine (source vs live notes)
   tasks/                        load_source, fetch_current, plan, apply, report
-scripts/make_example_source.py  regenerates files/vm_tags.example.{csv,xlsx}
-tests/                          50 unit tests
+scripts/make_example_source.py  regenerates files/vm_tags.example.csv
+tests/                          49 unit tests
 ```
 
 The playbooks live at the repo root and the plugins live inside the role on
@@ -65,7 +64,9 @@ depends on `ansible.cfg` being honoured. That is what makes it portable to AWX.
 
 ## Source file format
 
-See `files/vm_tags.example.csv` (or `.xlsx`, sheet `VMs`).
+**CSV only.** See `files/vm_tags.example.csv`. Anything that is not a `.csv`
+is rejected up front with a message telling you to re-export, rather than being
+parsed as text and producing garbage rows.
 
 **The header row is found automatically.** `pxt_source_header_row: "auto"`
 scans for the first row containing the `VMID` column, so it does not matter
@@ -118,10 +119,10 @@ never written back.
 - **Key order is the config order**, not alphabetical, so notes are stable and
   re-runs are genuinely idempotent.
 
-### CSV or xlsx?
+### Why CSV only
 
-**Use CSV.** Both work — the format is detected from the file extension — but
-CSV is better here on every axis that matters:
+The reader used to accept `.xlsx` and `.tsv` too. That is gone, because xlsx
+was worse on every axis that matters here:
 
 | | CSV | XLSX |
 |---|---|---|
@@ -131,10 +132,13 @@ CSV is better here on every axis that matters:
 | Merge conflicts | resolvable | not resolvable |
 | Formulas, colours, multiple sheets | lost | kept |
 
-Keep authoring in Excel — just *Save As → CSV UTF-8* and commit that. The
-export step is not extra friction, because committing the file is already a
-manual step, and the reviewable diff is worth it: `git log -p files/vm_tags.csv`
-becomes the audit trail for who changed which VM's metadata and when.
+Dropping it removes the only reason this project would ever need a custom
+execution environment, which is why `execution-environment.yml` and
+`requirements.txt` are no longer in the repo.
+
+Keep authoring in Excel — just *Save As → CSV UTF-8*. The export step is not
+extra friction, because getting the file to AWX is already a manual step, and
+the reviewable diff is worth it.
 
 Two Excel-export gotchas, both handled:
 
@@ -150,7 +154,7 @@ Two Excel-export gotchas, both handled:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
-pip install ansible-core pytest      # add openpyxl only for the xlsx path
+pip install ansible-core pytest      # that is the whole dependency list
 
 # dry run — prints the plan, writes nothing. This is the default
 ansible-playbook sync_vm_metadata.yml \
@@ -175,10 +179,10 @@ collections need installing for the default path.
 | `pxt_api_url` | — | `https://pve01.example.com:8006` |
 | `pxt_api_token_id` | — | `user@realm!tokenname` |
 | `pxt_api_token_secret` | — | token UUID, inject from AWX |
-| `pxt_source_path` | `files/vm_tags.csv` | source table; `.csv`, `.tsv` or `.xlsx` |
-| `pxt_source_url` | `""` | download the table per run instead of reading the checkout |
+| `pxt_source_path` | `files/vm_tags.csv` | source csv; a non-`.csv` file is rejected |
+| `pxt_source_url` | `""` | download the csv per run instead of reading the checkout |
 | `pxt_source_encoding` | `utf-8-sig` | set `cp1252` for a non-UTF-8 Excel export |
-| `pxt_source_sheet` | `VMs` | xlsx only, ignored for csv |
+| `pxt_source_delimiter` | `,` | set `;` for an Excel export from a non-English locale |
 | `pxt_source_header_row` | `"auto"` | header row; `auto` finds it via the VMID column |
 | `pxt_metadata_columns` | 10 columns | sheet header -> note key, in write order |
 | `pxt_preserve_unmanaged` | `true` | keep existing non-managed note lines |
@@ -251,24 +255,22 @@ Only reach for this if Git is genuinely unavailable.
 
 ### Will it run once it is there?
 
-Yes, on the CSV path, with no custom Execution Environment. The two things that
-usually break a project moved into AWX are both designed around here:
+Yes, with no custom Execution Environment. The two things that usually break a
+project moved into AWX are both designed around here:
 
 - **Custom plugins.** They live in `roles/proxmox_tagging/lookup_plugins/` and
   `filter_plugins/`, which Ansible loads automatically with the role. Verified
   by running from an unrelated working directory with an empty `ansible.cfg` —
   the project's `ansible.cfg` is *not* required.
-- **Python dependencies.** The CSV reader is standard library, and every module
-  used is in `ansible.builtin`. The stock `awx-ee` image is enough. Only the
-  xlsx path needs `openpyxl`, and therefore a custom EE.
+- **Python dependencies.** There are none. The CSV reader is standard library
+  and every module used is in `ansible.builtin`, so the stock `awx-ee` image is
+  enough.
 
 ## AWX setup
 
 1. **Project** — see above; Git with *Update Revision on Launch*.
-2. **Execution Environment** — leave it on the default `AWX EE`. Only if you
-   keep the source as .xlsx do you need
-   `ansible-builder build -t proxmox-tagging-ee:1.0.0 -f execution-environment.yml`,
-   pushed to a registry and registered in AWX.
+2. **Execution Environment** — leave it on the default `AWX EE`. Nothing here
+   needs a custom one.
 3. **Credential** — create a custom credential type so the token never appears
    in job output:
 
@@ -310,18 +312,21 @@ are available to later workflow nodes and to notification templates.
 
 ## Where the source file lives
 
-The default reads `files/vm_tags.csv` from the project checkout, so Git is the
-audit trail — the team commits the export, AWX syncs it on launch. If it must
-stay on SharePoint or a file share, set `pxt_source_url` instead and the role
-downloads it to a temp dir per run.
+Two options:
 
-Committing it is the better default: history, blame and PR review on metadata
-changes for free.
+- **`pxt_source_path`** — reads `files/vm_tags.csv` from the project checkout,
+  so Git becomes the audit trail: history, blame and PR review on metadata
+  changes for free.
+- **`pxt_source_url`** — downloads the csv to a temp dir per run and deletes it
+  afterwards. Use this when the export must not be committed. This is what the
+  dev environment does: the csv is served over HTTP from the AWX VM itself.
+
+Keep the `.csv` suffix on the URL — the reader checks the extension.
 
 ## Tests
 
 ```bash
-pytest tests/ -q      # 50 tests
+pytest tests/ -q      # 49 tests
 ```
 
 Two areas, both chosen because they are where the risk is:
@@ -329,9 +334,9 @@ Two areas, both chosen because they are where the risk is:
 - **`metadata_plan`** — note rendering and parsing, idempotency, blank-cell
   omission, free-text preservation, unmatched rows, duplicate and malformed
   VMIDs, LXC vs QEMU routing.
-- **`read_table`** — header auto-detection across all three preamble layouts,
+- **`read_csv`** — header auto-detection across all three preamble layouts,
   BOM stripping, cp1252 exports, quoted fields containing commas, blank rows,
-  and the openpyxl float-to-`100.0` trap.
+  and rejection of non-csv files.
 
 ## API call volume
 

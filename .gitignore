@@ -9,5 +9,6 @@ venv/
 # AWX installs galaxy content here on project sync; requirements.yml is tracked
 collections/ansible_collections/
 
-# Excel lock files
-~$*.xlsx
+# The source of truth is csv; workbooks are never committed here
+*.xlsx
+*.xlsm

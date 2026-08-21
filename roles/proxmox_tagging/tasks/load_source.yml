@@ -1,5 +1,5 @@
 ---
-- name: Create a working directory for the downloaded workbook
+- name: Create a working directory for the downloaded csv
   ansible.builtin.tempfile:
     state: directory
     suffix: pxt
@@ -18,36 +18,35 @@
 
 - name: Resolve the source path
   ansible.builtin.set_fact:
-    pxt_workbook: >-
+    pxt_source_file: >-
       {{ pxt_download.dest if (pxt_source_url | length > 0) else pxt_source_path }}
 
-- name: Confirm the source table exists
+- name: Confirm the source csv exists
   ansible.builtin.stat:
-    path: "{{ pxt_workbook }}"
-  register: pxt_workbook_stat
+    path: "{{ pxt_source_file }}"
+  register: pxt_source_stat
 
-- name: Fail when the source table is missing
+- name: Fail when the source csv is missing
   ansible.builtin.fail:
     msg: >-
-      tag source table not found at {{ pxt_workbook }}. Commit your export
+      metadata source csv not found at {{ pxt_source_file }}. Put your export
       there (see files/vm_tags.example.csv for the expected columns), or point
       pxt_source_path / pxt_source_url somewhere else.
-  when: not pxt_workbook_stat.stat.exists
+  when: not pxt_source_stat.stat.exists
 
-- name: Read the source table
+- name: Read the source csv
   ansible.builtin.set_fact:
     pxt_rows: >-
-      {{ lookup('read_table', pxt_workbook,
-                format=pxt_source_format,
-                sheet=pxt_source_sheet,
+      {{ lookup('read_csv', pxt_source_file,
                 header_row=pxt_source_header_row,
                 header_marker=pxt_vmid_column,
+                delimiter=pxt_source_delimiter,
                 encoding=pxt_source_encoding,
                 wantlist=True) }}
 
 - name: Fail when the source table is empty
   ansible.builtin.fail:
-    msg: "{{ pxt_workbook }} contains no data rows"
+    msg: "{{ pxt_source_file }} contains no data rows"
   when: pxt_rows | length == 0
 
 - name: Confirm the mapped columns are present
@@ -66,7 +65,7 @@
 
 - name: Report the source size
   ansible.builtin.debug:
-    msg: "loaded {{ pxt_rows | length }} rows from {{ pxt_workbook }}"
+    msg: "loaded {{ pxt_rows | length }} rows from {{ pxt_source_file }}"
 
 - name: Remove the downloaded table
   ansible.builtin.file:

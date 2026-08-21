@@ -1,32 +1,23 @@
-"""Lookup plugin that reads a csv/tsv/xlsx sheet into a list of row dicts."""
+"""Lookup plugin that reads a csv sheet into a list of row dicts."""
 
 from __future__ import annotations
 
 DOCUMENTATION = r"""
-name: read_table
-short_description: Read a csv, tsv or xlsx table into a list of dictionaries
+name: read_csv
+short_description: Read a csv table into a list of dictionaries
 description:
-  - Reads a tabular file and returns one dict per data row, keyed by the header
+  - Reads a csv file and returns one dict per data row, keyed by the header
     row values.
-  - CSV and TSV are handled with the Python standard library, so no extra
-    dependency is required. XLSX additionally needs the openpyxl package in the
-    execution environment.
-  - The format is chosen from the file extension unless O(format) is set.
+  - Uses the Python standard library only, so the stock awx-ee execution
+    environment runs it with no extra dependency.
+  - CSV is the only supported format. Export the sheet from Excel with
+    I(Save As -> CSV UTF-8).
 options:
   _terms:
-    description: Path to the table file
+    description: Path to the csv file
     required: true
     type: list
     elements: path
-  format:
-    description: Force a format instead of detecting it from the extension
-    type: str
-    choices: [auto, csv, tsv, xlsx]
-    default: auto
-  sheet:
-    description: Worksheet name for xlsx; defaults to the active sheet
-    type: str
-    default: null
   header_row:
     description:
       - 1-indexed row holding the column headers, or C(auto) to find it.
@@ -41,9 +32,9 @@ options:
     type: str
     default: null
   delimiter:
-    description: Field delimiter override for csv/tsv
+    description: Field delimiter; set to C(;) for a European Excel export
     type: str
-    default: null
+    default: ","
   encoding:
     description: Text encoding; utf-8-sig transparently strips an Excel BOM
     type: str
@@ -55,13 +46,13 @@ options:
 """
 
 EXAMPLES = r"""
-- name: Load the tag source table
+- name: Load the metadata source table
   ansible.builtin.set_fact:
-    rows: "{{ lookup('read_table', '/data/vm_tags.csv') }}"
+    rows: "{{ lookup('read_csv', '/data/vm_tags.csv') }}"
 
-- name: Load a specific worksheet from a workbook
+- name: Load a table whose headers start on row 3
   ansible.builtin.set_fact:
-    rows: "{{ lookup('read_table', '/data/vm_tags.xlsx', sheet='VMs') }}"
+    rows: "{{ lookup('read_csv', '/data/vm_tags.csv', header_row=3) }}"
 """
 
 RETURN = r"""
@@ -80,15 +71,7 @@ from ansible.errors import AnsibleError  # noqa: E402
 from ansible.module_utils.common.text.converters import to_native  # noqa: E402
 from ansible.plugins.lookup import LookupBase  # noqa: E402
 
-_EXTENSIONS = {
-    ".csv": "csv",
-    ".tsv": "tsv",
-    ".tab": "tsv",
-    ".xlsx": "xlsx",
-    ".xlsm": "xlsx",
-}
-
-_DELIMITERS = {"csv": ",", "tsv": "\t"}
+_ACCEPTED_EXTENSIONS = (".csv",)
 
 
 def _cell_to_text(value):
@@ -179,30 +162,22 @@ class LookupModule(LookupBase):
         results = []
         for term in terms:
             path = self.find_file_in_search_path(variables, "files", term) or term
-            fmt = self._resolve_format(path)
-            if fmt == "xlsx":
-                results.extend(self._read_xlsx(path))
-            else:
-                results.extend(self._read_delimited(path, fmt))
+            self._reject_non_csv(path)
+            results.extend(self._read_csv(path))
         return results
 
-    def _resolve_format(self, path):
-        """Pick the reader from the option or the file extension"""
-        fmt = self.get_option("format") or "auto"
-        if fmt != "auto":
-            return fmt
-
+    def _reject_non_csv(self, path):
+        """Fail early and clearly rather than parsing a workbook as text"""
         extension = os.path.splitext(path)[1].lower()
-        if extension not in _EXTENSIONS:
+        if extension not in _ACCEPTED_EXTENSIONS:
             raise AnsibleError(
-                "cannot infer a format for {0}; pass format=csv, tsv or "
-                "xlsx explicitly".format(path)
+                "{0} is not a .csv file; this role reads csv only. Open the "
+                "sheet in Excel and Save As -> CSV UTF-8".format(path)
             )
-        return _EXTENSIONS[extension]
 
-    def _read_delimited(self, path, fmt):
-        """Read a csv or tsv file with the standard library"""
-        delimiter = self.get_option("delimiter") or _DELIMITERS[fmt]
+    def _read_csv(self, path):
+        """Read the csv with the standard library"""
+        delimiter = self.get_option("delimiter") or ","
         encoding = self.get_option("encoding") or "utf-8-sig"
 
         try:
@@ -226,44 +201,3 @@ class LookupModule(LookupBase):
             self.get_option("skip_empty"),
             path,
         )
-
-    def _read_xlsx(self, path):
-        """Read one worksheet from a workbook via openpyxl"""
-        try:
-            import openpyxl
-        except ImportError:
-            raise AnsibleError(
-                "reading {0} requires openpyxl, which is not in this execution "
-                "environment; either build an EE with openpyxl or export the "
-                "sheet to CSV, which needs no extra dependency".format(path)
-            )
-
-        try:
-            workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        except Exception as exc:
-            raise AnsibleError(
-                "could not open workbook {0}: {1}".format(path, to_native(exc))
-            )
-
-        try:
-            sheet_name = self.get_option("sheet")
-            if sheet_name:
-                if sheet_name not in workbook.sheetnames:
-                    raise AnsibleError(
-                        "worksheet '{0}' not found in {1}; available: {2}".format(
-                            sheet_name, path, ", ".join(workbook.sheetnames)
-                        )
-                    )
-                worksheet = workbook[sheet_name]
-            else:
-                worksheet = workbook.active
-
-            return _rows_to_records(
-                worksheet.iter_rows(values_only=True),
-                self.get_option("header_row"),
-                self.get_option("header_marker"),
-                self.get_option("skip_empty"),
-                path,
-            )
-        finally:
-            workbook.close()
