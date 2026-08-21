@@ -45,17 +45,20 @@ alone.
 ```
 sync_vm_metadata.yml            the only playbook; dry run unless told otherwise
 ansible.cfg                     local convenience only; AWX does not need it
-collections/requirements.yml    optional collections, auto-installed by AWX
-inventory/localhost.yml         single local host
-inventory/group_vars/all.yml    site configuration (no secrets)
-files/vm_tags.csv               your source of truth (not in git yet)
+inventory/localhost.yml         single local host, for local runs
 roles/proxmox_tagging/
+  defaults/main.yml             every setting, and the only place they live
   lookup_plugins/read_csv.py    csv -> list of row dicts
   filter_plugins/metadata_plan.py  diff engine (source vs live notes)
   tasks/                        load_source, fetch_current, plan, apply, report
+files/vm_tags.example.csv       the expected column layout
 scripts/make_example_source.py  regenerates files/vm_tags.example.csv
 tests/                          49 unit tests
 ```
+
+There is no `collections/requirements.yml` and no `requirements.txt` on purpose.
+Everything the role uses ships with `ansible-core`, so the stock `awx-ee` image
+runs it unchanged and every project sync stays fast.
 
 The playbooks live at the repo root and the plugins live inside the role on
 purpose. Ansible auto-loads `roles/<role>/{lookup,filter}_plugins/` whenever the
@@ -99,7 +102,7 @@ Ten columns become notes, in this order, via `pxt_metadata_columns`:
 
 The left column must match your headers **exactly**. If any is missing the run
 fails and prints the headers it actually found, so a rename is a one-line fix in
-`inventory/group_vars/all.yml`.
+`roles/proxmox_tagging/defaults/main.yml`.
 
 Everything else in the sheet — `Host`, `Type`, `IP Address`, `Status`, `OS`,
 `CPU`, `Memory`, `Disk` — is a fact read *from* Proxmox, not metadata, and is
@@ -169,8 +172,8 @@ ansible-playbook sync_vm_metadata.yml \
 ```
 
 There is one playbook. `pxt_dry_run` defaults to `true`, so a run that forgets
-to set it reports instead of writing. `--check` also forces a dry run. No
-collections need installing for the default path.
+to set it reports instead of writing. `--check` also forces a dry run. There are
+no collections or Python packages to install.
 
 ## Key variables
 
@@ -211,52 +214,24 @@ pveum user token add ansible@pve tagging --privsep 0
 
 `VM.Audit` covers the read, `VM.Config.Options` covers the notes write.
 
-## Getting this repo onto AWX
+## AWX
 
-AWX does not run playbooks from a directory on the host. It runs them from a
-**Project**, and a Project has two possible sources.
+The AWX objects are **not** created by hand — they are managed as code in the
+`terraform-awx` repo, which runs on the AWX VM. It creates the project (this
+repo, synced from GitHub on every launch), a localhost inventory, the Proxmox
+credential, and two job templates:
 
-### Option A — Git (recommended)
+| Template | `pxt_dry_run` | What it does |
+|---|---|---|
+| `proxmox-vm-tagging-validate` | `true` | Prints the plan, writes nothing |
+| `proxmox-vm-tagging-apply` | `false` | Writes notes into Proxmox |
 
-Push this repo anywhere AWX can reach over HTTPS or SSH: GitHub, GitLab, or a
-Gitea/bare repo on your own network. Then create the Project with SCM Type
-`Git`, set the URL, and enable *Update Revision on Launch*.
+Both point at `sync_vm_metadata.yml`. Writing is an explicit opt-in, so a
+misconfigured template reports rather than writes. Restrict *Execute* on the
+apply template with AWX RBAC.
 
-This is the option to pick. The spreadsheet is committed alongside the
-playbook, so the Git history becomes the audit trail for metadata changes, and AWX
-re-syncs on every launch — no copying files onto the VM ever again.
-
-If the AWX VM has no route to a Git host, a bare repo on the VM itself works:
-
-```bash
-# on the AWX VM
-git init --bare /srv/git/proxmox-vm-tagging.git
-# from your workstation
-git remote add origin ssh://user@awx-vm/srv/git/proxmox-vm-tagging.git
-git push -u origin main
-```
-
-Point the Project at that SSH URL with a Machine credential.
-
-### Option B — Manual project path
-
-AWX can read from `/var/lib/awx/projects/<subdir>`, exposed as SCM Type
-`Manual`. The catch is *where* that path has to exist:
-
-- **AWX on Kubernetes (awx-operator, the current install method)** — the path
-  must be inside the task pod, not on the VM filesystem. You need a
-  PersistentVolumeClaim (`projects_persistence: true` and a
-  `projects_storage_class` in the AWX spec), then copy files in with
-  `kubectl cp` on every change. Workable, but you are hand-syncing forever.
-- **Older docker-compose AWX** — bind-mount a host directory to
-  `/var/lib/awx/projects` and drop the repo there.
-
-Only reach for this if Git is genuinely unavailable.
-
-### Will it run once it is there?
-
-Yes, with no custom Execution Environment. The two things that usually break a
-project moved into AWX are both designed around here:
+Two things usually break a project moved into AWX, and both are designed around
+here:
 
 - **Custom plugins.** They live in `roles/proxmox_tagging/lookup_plugins/` and
   `filter_plugins/`, which Ansible loads automatically with the role. Verified
@@ -264,50 +239,9 @@ project moved into AWX are both designed around here:
   the project's `ansible.cfg` is *not* required.
 - **Python dependencies.** There are none. The CSV reader is standard library
   and every module used is in `ansible.builtin`, so the stock `awx-ee` image is
-  enough.
+  enough and no custom Execution Environment is needed.
 
-## AWX setup
-
-1. **Project** — see above; Git with *Update Revision on Launch*.
-2. **Execution Environment** — leave it on the default `AWX EE`. Nothing here
-   needs a custom one.
-3. **Credential** — create a custom credential type so the token never appears
-   in job output:
-
-   *Input configuration*
-   ```yaml
-   fields:
-     - id: pve_token_id
-       type: string
-       label: Token ID
-     - id: pve_token_secret
-       type: string
-       label: Token Secret
-       secret: true
-   required: [pve_token_id, pve_token_secret]
-   ```
-
-   *Injector configuration*
-   ```yaml
-   extra_vars:
-     pxt_api_token_id: "{{ pve_token_id }}"
-     pxt_api_token_secret: "{{ pve_token_secret }}"
-   ```
-
-4. **Inventory** — a static inventory containing only `localhost`, with
-   `ansible_connection=local`. Everything is API-driven; AWX never touches a
-   guest over SSH.
-5. **Job templates** — two, both on `sync_vm_metadata.yml` and both with the credential
-   attached. They differ only in extra vars: the dry-run template sets
-   `pxt_dry_run: true`, the apply template sets `pxt_dry_run: false`. Writing is
-   an explicit opt-in, so a misconfigured template reports rather than writes.
-   Restrict *Execute* on the apply template with AWX RBAC.
-6. **Workflow** — chain dry run → approval node → apply. The approval node is
-   what makes the 400 VM blast radius reviewable before it lands.
-7. **Schedule** — run the dry run nightly to surface drift; keep the apply
-   manual or weekly.
-
-Both playbooks call `set_stats`, so `pxt_changed`, `pxt_unmanaged` and friends
+The playbook calls `set_stats`, so `pxt_changed`, `pxt_unmanaged` and friends
 are available to later workflow nodes and to notification templates.
 
 ## Where the source file lives
